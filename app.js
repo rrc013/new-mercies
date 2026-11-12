@@ -23,7 +23,7 @@ const S = {
   todayCheckin: null, editingCheckin: false, unlocked: false, hiddenAt: 0,
   shares: [], reacts: [], prayers: [], acks: [], modView: false,
 };
-const TABS = ['today', 'group', 'shares', 'prayer', 'me'];
+const TABS = ['today', 'group', 'shares', 'prayer', 'study', 'me'];
 const ACT = {}; // click handlers, keyed by data-act
 
 // ---------- Small helpers ------------------------------------------------
@@ -128,7 +128,7 @@ const daysLabel = (d) => d === 0 ? 'Day one' : d === 1 ? '1 day' : `${d} days`;
 
 // ---------- PIN (stored only on this device, as a salted hash) -----------
 const PIN_KEY = 'nm-pin', FAIL_KEY = 'nm-pin-fails';
-const b64e = (u8) => btoa(String.fromCharCode(...u8));
+const b64e = (u8) => { let s = ''; for (let i = 0; i < u8.length; i += 0x8000) s += String.fromCharCode.apply(null, u8.subarray(i, i + 0x8000)); return btoa(s); };
 const b64d = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 async function pinHash(pin, saltB64) {
   const salt = saltB64 ? b64d(saltB64) : crypto.getRandomValues(new Uint8Array(16));
@@ -175,15 +175,16 @@ function renderSetPin() {
     if (!first) { first = pin; api.reset(); api.setSub('Enter it once more to confirm.'); return; }
     if (pin !== first) { first = null; api.setSub(`Choose a ${CONFIG.pinLength}-digit PIN.`); return api.reset("Those didn't match. Let's try again."); }
     await savePin(pin);
+    openVault(pin);
     S.unlocked = true;
     enterApp();
   }, 'Set your PIN', `Choose a ${CONFIG.pinLength}-digit PIN. You'll enter it every time you open New Mercies on this phone.`);
 }
 
 function renderLock() {
-  S.unlocked = false;
+  S.unlocked = false; closeVault();
   keypad(async (pin, api) => {
-    if (await checkPin(pin)) { localStorage.removeItem(FAIL_KEY); S.unlocked = true; return enterApp(); }
+    if (await checkPin(pin)) { localStorage.removeItem(FAIL_KEY); openVault(pin); S.unlocked = true; return enterApp(); }
     const fails = Number(localStorage.getItem(FAIL_KEY) || 0) + 1;
     localStorage.setItem(FAIL_KEY, String(fails));
     if (fails >= CONFIG.maxPinTries) { await signOut(); return renderAuth('signin', 'Too many wrong PIN attempts. Please sign in again with your name and password.'); }
@@ -214,7 +215,8 @@ function renderAuth(mode = 'signin', notice = '') {
         <button class="btn primary block" data-act="signIn">Sign in</button>
         <p class="error" id="a-err"></p>
         <p class="hint">Forgot your password? Ask your moderator to reset it.</p>
-      </div>` : `
+      </div>
+      <p class="center small"><a href="#" data-act="openBackupNoAccount" style="color:var(--muted)">Have a Step 4 backup? Open it</a></p>` : `
       <div class="card stack">
         <div><label for="j-code">Invite code</label><input id="j-code" type="text" autocapitalize="characters" placeholder="NM-XXXXXX"></div>
         <div><label for="j-name">Choose a group name</label><input id="j-name" type="text" maxlength="24" autocapitalize="words" autocomplete="off">
@@ -345,13 +347,15 @@ const ICONS = {
   group: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.4"/><path d="M3 19c0-3.3 2.7-5 6-5s6 1.7 6 5M15 14.5c3 0 6 1.3 6 4.5"/></svg>',
   shares: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M4 5h16v11H9l-5 4z"/></svg>',
   prayer: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>',
+  study: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"><path d="M3 5.5c3-1.2 6-1 9 1 3-2 6-2.2 9-1V19c-3-1-6-.8-9 1-3-1.8-6-2-9-1z"/><path d="M12 6.5V20"/></svg>',
   me: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-6 8-6s8 2 8 6"/></svg>',
 };
-const LABELS = { today: 'Today', group: 'Group', shares: 'Shares', prayer: 'Prayer', me: 'Me' };
+const LABELS = { today: 'Today', group: 'Group', shares: 'Shares', prayer: 'Prayer', study: 'Study', me: 'Me' };
 
 function go(tab) {
   if (tab !== 'today' && !S.todayCheckin) { toast("Check in first. It only takes a moment."); tab = 'today'; }
   if (tab !== 'me') S.modView = false;
+  if (tab !== 'study') S.studySub = null;
   S.tab = tab;
   history.replaceState(null, '', '#' + tab);
   $app.innerHTML = `<div class="screen" id="view"><div class="spinner"></div></div>
@@ -367,7 +371,7 @@ async function renderView() {
   const view = document.getElementById('view');
   if (!view) return;
   try {
-    const fn = { today: viewToday, group: viewGroup, shares: viewShares, prayer: viewPrayer, me: S.modView ? viewModerator : viewMe }[S.tab];
+    const fn = { today: viewToday, group: viewGroup, shares: viewShares, prayer: viewPrayer, study: viewStudy, me: S.modView ? viewModerator : viewMe }[S.tab];
     await fn(view);
   } catch (e) {
     view.innerHTML = `<div class="card"><h2>Something went wrong</h2><p class="muted">${esc(errMsg(e))}</p>
@@ -760,15 +764,16 @@ ACT.testPush = (btn) => busy(btn, async () => {
 });
 
 ACT.changePin = () => {
-  let stage = 'old', first = null;
+  let stage = 'old', first = null, oldPin = null;
   keypad(async (pin, api) => {
     if (stage === 'old') {
       if (!(await checkPin(pin))) return api.reset('That PIN is not right.');
+      oldPin = pin;
       stage = 'new'; api.setSub(`Choose a new ${CONFIG.pinLength}-digit PIN.`); return api.reset();
     }
     if (stage === 'new') { first = pin; stage = 'confirm'; api.setSub('Enter it once more to confirm.'); return api.reset(); }
     if (pin !== first) { stage = 'new'; api.setSub(`Choose a new ${CONFIG.pinLength}-digit PIN.`); return api.reset("Those didn't match."); }
-    await savePin(pin); toast('PIN changed.'); go('me');
+    await savePin(pin); await rewrapVault(oldPin, pin); toast('PIN changed.'); go('me');
   }, 'Change PIN', 'Enter your current PIN.');
 };
 ACT.changePassword = () => {
@@ -894,6 +899,425 @@ ACT.modMember = (el) => {
     catch (e) { toast(errMsg(e)); }
   };
 };
+
+// ---------- Step 4 vault: stored only on this phone, encrypted ----------
+// A random key encrypts every Step 4 record. That key is itself locked with the app PIN.
+const VAULT_KEY = 'nm-s4key';
+let sessionPin = null;
+const rand = (n) => crypto.getRandomValues(new Uint8Array(n));
+async function kekFrom(secret, salt) {
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(secret), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({ name: 'PBKDF2', hash: 'SHA-256', salt, iterations: 300000 }, base,
+    { name: 'AES-GCM', length: 256 }, false, ['encrypt', 'decrypt']);
+}
+async function wrapRaw(raw, pin) {
+  const salt = rand(16), iv = rand(12);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await kekFrom(pin, salt), raw));
+  return { salt: b64e(salt), iv: b64e(iv), ct: b64e(ct) };
+}
+async function unwrapRaw(rec, pin) {
+  const kek = await kekFrom(pin, b64d(rec.salt));
+  return new Uint8Array(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(rec.iv) }, kek, b64d(rec.ct)));
+}
+const importDek = (raw) => crypto.subtle.importKey('raw', raw, 'AES-GCM', false, ['encrypt', 'decrypt']);
+function openVault(pin) {
+  sessionPin = pin;
+  S.vaultReady = (async () => {
+    S.vault = null; S.vaultLocked = false;
+    const rec = JSON.parse(localStorage.getItem(VAULT_KEY) || 'null');
+    try {
+      if (!rec) { const raw = rand(32); localStorage.setItem(VAULT_KEY, JSON.stringify(await wrapRaw(raw, pin))); S.vault = await importDek(raw); }
+      else S.vault = await importDek(await unwrapRaw(rec, pin));
+      navigator.storage?.persist?.().catch(() => {});
+    } catch (_) { S.vaultLocked = true; }
+  })();
+  return S.vaultReady;
+}
+async function rewrapVault(oldPin, newPin) {
+  const rec = JSON.parse(localStorage.getItem(VAULT_KEY) || 'null');
+  if (rec) {
+    try { const raw = await unwrapRaw(rec, oldPin); localStorage.setItem(VAULT_KEY, JSON.stringify(await wrapRaw(raw, newPin))); }
+    catch (_) { /* locked with an older PIN; leave it for the recovery screen */ }
+  }
+  return openVault(newPin);
+}
+function closeVault() { S.vault = null; sessionPin = null; S.s4 = null; }
+
+function idb() {
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('nm-local', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('step4', { keyPath: 'id' });
+    r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error);
+  });
+}
+async function idbReq(mode, fn) {
+  const db = await idb();
+  try {
+    return await new Promise((res, rej) => {
+      const tx = db.transaction('step4', mode); const req = fn(tx.objectStore('step4'));
+      tx.oncomplete = () => res(req ? req.result : undefined); tx.onerror = () => rej(tx.error); tx.onabort = () => rej(tx.error);
+    });
+  } finally { db.close(); }
+}
+async function s4All() {
+  const rows = (await idbReq('readonly', (st) => st.getAll())) || [];
+  const out = [];
+  for (const r of rows) {
+    try { out.push(JSON.parse(new TextDecoder().decode(await crypto.subtle.decrypt({ name: 'AES-GCM', iv: r.iv }, S.vault, r.ct)))); }
+    catch (_) { /* unreadable record: skip */ }
+  }
+  return out.sort((a, b) => (a.created || '').localeCompare(b.created || ''));
+}
+async function s4Put(obj) {
+  obj.updated = new Date().toISOString(); obj.created ||= obj.updated;
+  const iv = rand(12);
+  const ct = await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, S.vault, new TextEncoder().encode(JSON.stringify(obj)));
+  await idbReq('readwrite', (st) => st.put({ id: obj.id, iv, ct }));
+}
+const s4Del = (id) => idbReq('readwrite', (st) => st.delete(id));
+const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+
+// ---------- Study tab ----------------------------------------------------
+async function viewStudy(view) {
+  if (S.studySub === 'step4') return viewStep4(view);
+  const st = window.NM_STUDY || { principles: [], steps: [] };
+  const item = (kind, x) => `<div class="member-row" data-act="studyItem" data-kind="${kind}" data-n="${x.n}">
+    <div class="avatar">${x.n}</div><div class="info"><div class="name">${esc(x.title || (kind === 'step' ? `Step ${x.n}` : `Principle ${x.n}`))}</div>
+    <div class="small muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.text ? x.text.split('\n')[0] : 'Text coming soon')}</div></div>
+    ${kind === 'step' && x.n === S.me.current_step ? '<span class="pill gold">Current</span>' : '<span class="muted">›</span>'}</div>`;
+  view.innerHTML = topbar('Study') + `
+    <div class="card verse" data-act="openStep4" style="cursor:pointer">
+      <div class="ref">Private · only on this phone</div>
+      <div class="row between"><div><h2 style="margin:0;color:#fff">My Step 4 inventory</h2>
+      <p style="margin:4px 0 0;color:#D8DCEA" class="small">Five-column inventory and handwritten pages, encrypted and never uploaded.</p></div>
+      <span style="font-size:1.6rem;color:#FBD98A">›</span></div></div>
+    ${st.principles.length ? `<div class="section-title">The principles</div><div class="card">${st.principles.map((p) => item('principle', p)).join('')}</div>` : ''}
+    ${st.steps.length ? `<div class="section-title">The steps</div><div class="card">${st.steps.map((p) => item('step', p)).join('')}</div>` : ''}`;
+}
+ACT.studyItem = (el) => {
+  const st = window.NM_STUDY || {}; const kind = el.dataset.kind; const n = Number(el.dataset.n);
+  const x = (kind === 'step' ? st.steps : st.principles).find((i) => i.n === n); if (!x) return;
+  const title = x.title || (kind === 'step' ? `Step ${n}` : `Principle ${n}`);
+  const m = modal(`<div class="section-title" style="margin-top:0">${kind === 'step' ? 'Step' : 'Principle'} ${n}</div>
+    <h2>${esc(title)}</h2>
+    ${x.text ? `<p style="white-space:pre-wrap">${esc(x.text)}</p>` : '<p class="muted">Text coming soon.</p>'}
+    ${(x.verses || []).map((v) => `<div class="card verse"><div class="ref">${esc(v.ref)}</div><p class="serif">${esc(v.text)}</p></div>`).join('')}
+    ${kind === 'step' ? (n === S.me.current_step ? '<p class="small muted center">This is the step you\'re working on.</p>'
+      : `<button class="btn block" data-x="cur">I'm working on this step</button>`) : ''}
+    ${kind === 'step' && n === 4 ? '<button class="btn primary block" data-x="s4" style="margin-top:8px">Open my Step 4 inventory</button>' : ''}
+    <button class="btn ghost block" data-x="close" style="margin-top:8px">Close</button>`);
+  m.el.querySelector('[data-x=close]').onclick = m.close;
+  const cur = m.el.querySelector('[data-x=cur]');
+  if (cur) cur.onclick = async () => { const { error } = await sb.rpc('set_step', { p_step: n }); if (error) return toast(errMsg(error)); S.me.current_step = n; m.close(); toast(`Working on step ${n}.`); renderView(); };
+  const s4 = m.el.querySelector('[data-x=s4]');
+  if (s4) s4.onclick = () => { m.close(); ACT.openStep4(); };
+};
+ACT.openStep4 = () => { S.studySub = 'step4'; renderView(); };
+ACT.closeStep4 = () => { S.studySub = null; renderView(); };
+
+// ---------- Step 4 inventory ----------------------------------------------
+const COLS = [
+  ['person', 'Person', 'Who do I resent, fear, or feel hurt by? A person, a place, an institution, or a principle.'],
+  ['cause', 'Cause', 'What happened? What did they do, or what do I believe they did?'],
+  ['effect', 'Effect', 'How did it affect me? My feelings, my relationships, my choices.'],
+  ['damage', 'Damage', 'What did it damage? My self-esteem, security, relationships, finances, or ambitions?'],
+  ['mypart', 'My Part', 'What part did I play? Where was I selfish, dishonest, afraid, or at fault? If you were abused or harmed as a child, that was not your fault. Leave this blank.'],
+];
+
+async function viewStep4(view) {
+  const head = `<div class="topbar"><button class="btn sm ghost" data-act="closeStep4">‹ Study</button>
+    <button class="btn sm ghost" data-act="refresh" aria-label="Refresh">↻</button></div><h1>My Step 4 inventory</h1>`;
+  await S.vaultReady;
+  if (S.vaultLocked) {
+    view.innerHTML = head + `<div class="card stack"><h2>Locked with an earlier PIN</h2>
+      <p class="muted small" style="margin:0">The Step 4 work on this phone was saved under a previous PIN. Enter that PIN to unlock it.</p>
+      <input id="old-pin" type="password" inputmode="numeric" maxlength="${CONFIG.pinLength}" placeholder="Previous PIN">
+      <button class="btn primary block" data-act="s4Recover">Unlock</button>
+      <p class="hint">Can't remember it? You can erase that work and start fresh. If you made a backup, you can restore it afterward.</p>
+      <button class="btn danger block" data-act="s4Erase">Erase and start fresh</button></div>`;
+    return;
+  }
+  if (!S.vault) { view.innerHTML = head + '<div class="card"><p class="muted">Lock the app and reopen it to access your Step 4 work.</p></div>'; return; }
+  S.s4 = await s4All();
+  const rows = S.s4.filter((r) => r.type === 'row'), pages = S.s4.filter((r) => r.type === 'page');
+  const tab = S.s4tab || 'rows';
+  view.innerHTML = head + `
+    <div class="card small" style="display:flex;gap:10px;align-items:flex-start"><span style="font-size:1.2rem">🔒</span>
+      <span class="muted">Everything here is encrypted and stays on this phone. It is never uploaded, and no one in the group can see it.</span></div>
+    <div class="tabs"><button data-act="s4Tab" data-t="rows" class="${tab === 'rows' ? 'on' : ''}">Five columns (${rows.length})</button>
+      <button data-act="s4Tab" data-t="pages" class="${tab === 'pages' ? 'on' : ''}">Handwritten (${pages.length})</button></div>
+    ${tab === 'rows' ? `
+      <button class="btn primary block" data-act="s4Row" data-id="">+ Add a person</button>
+      <div style="margin-top:14px">${rows.map((r) => `<div class="card" data-act="s4Row" data-id="${r.id}" style="cursor:pointer">
+        <strong>${esc(r.person || 'Untitled')}</strong>
+        <div class="small muted" style="margin-top:4px">${esc((r.cause || '').slice(0, 120)) || 'No cause written yet'}</div>
+        <div class="row wrap" style="gap:4px;margin-top:8px">${COLS.slice(1).map(([k, l]) => `<span class="pill ${r[k] ? 'good' : 'none'}">${l}</span>`).join('')}</div></div>`).join('')
+        || '<div class="empty">No entries yet. Add the first person, place, or thing on your list.</div>'}</div>`
+    : `
+      <label class="btn primary block" style="cursor:pointer">📷 Photograph a page<input id="s4-file" type="file" accept="image/*" hidden></label>
+      <p class="hint center">Write by hand, then take a photo. You can keep just the photo or turn it into text you can edit, right on this phone.</p>
+      <div style="margin-top:10px">${pages.map((p) => `<div class="card" data-act="s4Page" data-id="${p.id}" style="cursor:pointer;display:flex;gap:12px">
+        ${p.image ? `<img src="${p.image}" alt="" style="width:64px;height:84px;object-fit:cover;border-radius:8px;flex:none">` : ''}
+        <div style="min-width:0"><strong>${esc(p.title || 'Untitled page')}</strong>
+        <div class="small muted" style="margin-top:4px">${p.text ? esc(p.text.slice(0, 110)) : 'Photo only'}</div></div></div>`).join('')
+        || '<div class="empty">No pages yet.</div>'}</div>`}
+    <div class="section-title">Keep it safe</div>
+    <div class="card stack">
+      <button class="btn block" data-act="s4Pdf">Save as PDF</button>
+      <button class="btn block" data-act="s4Backup">Make an encrypted backup</button>
+      <button class="btn block" data-act="s4Restore">Restore from a backup</button>
+      <p class="hint" style="margin:0">A backup lets you move your work to a new phone or keep it if you leave the group. It's locked with a backup password you choose.</p>
+    </div>`;
+  const f = document.getElementById('s4-file');
+  if (f) f.onchange = () => { if (f.files[0]) s4NewPhoto(f.files[0]); f.value = ''; };
+}
+ACT.s4Tab = (el) => { S.s4tab = el.dataset.t; renderView(); };
+
+ACT.s4Recover = async (btn) => busy(btn, async () => {
+  const old = document.getElementById('old-pin').value;
+  try {
+    const rec = JSON.parse(localStorage.getItem(VAULT_KEY));
+    const raw = await unwrapRaw(rec, old);
+    localStorage.setItem(VAULT_KEY, JSON.stringify(await wrapRaw(raw, sessionPin)));
+    await openVault(sessionPin); toast('Unlocked.'); renderView();
+  } catch (_) { toast("That PIN didn't unlock it."); }
+});
+ACT.s4Erase = async () => {
+  if (!(await confirmBox('Erase Step 4 work on this phone?', 'This permanently deletes the locked Step 4 work on this phone. It cannot be undone.', 'Erase', true))) return;
+  await idbReq('readwrite', (st) => st.clear()); localStorage.removeItem(VAULT_KEY);
+  await openVault(sessionPin); toast('Erased. You can start fresh.'); renderView();
+};
+
+ACT.s4Row = (el) => {
+  const r = S.s4.find((x) => x.id === el.dataset.id) || { id: newId(), type: 'row' };
+  const isNew = !el.dataset.id;
+  const m = modal(`<h2>${isNew ? 'New entry' : esc(r.person || 'Entry')}</h2><div class="stack">
+    ${COLS.map(([k, l, h]) => `<div><label for="c-${k}">${l}</label>
+      ${k === 'person' ? `<input id="c-${k}" type="text" maxlength="200" value="${esc(r[k] || '')}">` : `<textarea id="c-${k}" maxlength="5000">${esc(r[k] || '')}</textarea>`}
+      <p class="hint">${esc(h)}</p></div>`).join('')}
+    <div class="row"><button class="btn ghost block" data-x="no">Cancel</button><button class="btn primary block" data-x="save">Save</button></div>
+    ${isNew ? '' : '<button class="btn danger block" data-x="del">Delete entry</button>'}</div>`);
+  m.el.querySelector('[data-x=no]').onclick = m.close;
+  m.el.querySelector('[data-x=save]').onclick = async () => {
+    COLS.forEach(([k]) => { r[k] = m.el.querySelector('#c-' + k).value.trim(); });
+    if (!r.person) return toast('Add a person, place, or thing first.');
+    await s4Put(r); m.close(); toast('Saved on this phone.'); renderView();
+  };
+  const del = m.el.querySelector('[data-x=del]');
+  if (del) del.onclick = async () => { if (!(await confirmBox('Delete this entry?', 'It will be removed from this phone.', 'Delete', true))) return; await s4Del(r.id); m.close(); renderView(); };
+};
+
+// Photos: shrink, keep on the phone, optionally read the handwriting on the phone
+function fileToImage(file) {
+  return new Promise((res, rej) => { const img = new Image(); img.onload = () => res(img); img.onerror = () => rej(new Error("Couldn't open that photo.")); img.src = URL.createObjectURL(file); });
+}
+async function shrinkPhoto(file, max = 1800) {
+  const img = await fileToImage(file);
+  const s = Math.min(1, max / Math.max(img.naturalWidth, img.naturalHeight));
+  const c = document.createElement('canvas'); c.width = Math.round(img.naturalWidth * s); c.height = Math.round(img.naturalHeight * s);
+  c.getContext('2d').drawImage(img, 0, 0, c.width, c.height); URL.revokeObjectURL(img.src);
+  return c.toDataURL('image/jpeg', 0.82);
+}
+function loadScript(src) {
+  if (document.querySelector(`script[data-src="${src}"]`)) return Promise.resolve();
+  return new Promise((res, rej) => { const s = document.createElement('script'); s.src = src; s.dataset.src = src; s.onload = res; s.onerror = () => rej(new Error('Could not load ' + src)); document.head.appendChild(s); });
+}
+async function readHandwriting(dataUrl, onProgress) {
+  await loadScript('tesseract.min.js');
+  const base = new URL('.', location.href).href.replace(/\/$/, '');
+  const worker = await window.Tesseract.createWorker('eng', 1, {
+    workerPath: base + '/worker.min.js', corePath: base, langPath: base, gzip: true, workerBlobURL: false,
+    logger: (m) => { if (m.status === 'recognizing text') onProgress(Math.round(m.progress * 100)); },
+  });
+  try {
+    // Light clean-up so pen on paper stands out: grayscale + contrast stretch
+    const img = new Image(); img.src = dataUrl; await img.decode();
+    const c = document.createElement('canvas'); c.width = img.naturalWidth; c.height = img.naturalHeight;
+    const g = c.getContext('2d'); g.drawImage(img, 0, 0);
+    const d = g.getImageData(0, 0, c.width, c.height), p = d.data;
+    let lo = 255, hi = 0;
+    for (let i = 0; i < p.length; i += 4) { const v = 0.299 * p[i] + 0.587 * p[i + 1] + 0.114 * p[i + 2]; p[i] = v; if (v < lo) lo = v; if (v > hi) hi = v; }
+    const span = Math.max(1, hi - lo);
+    for (let i = 0; i < p.length; i += 4) { const v = Math.max(0, Math.min(255, ((p[i] - lo) / span) * 255)); p[i] = p[i + 1] = p[i + 2] = v; }
+    g.putImageData(d, 0, 0);
+    const { data } = await worker.recognize(c);
+    return (data.text || '').replace(/\n{3,}/g, '\n\n').trim();
+  } finally { await worker.terminate(); }
+}
+
+async function s4NewPhoto(file) {
+  let image;
+  try { image = await shrinkPhoto(file); } catch (e) { return toast(errMsg(e)); }
+  const m = modal(`<h2>New page</h2><img src="${image}" alt="" style="width:100%;border-radius:12px;max-height:46vh;object-fit:contain;background:#000">
+    <div style="margin-top:12px"><label for="pg-title">Title <span class="muted">(optional)</span></label><input id="pg-title" type="text" maxlength="120" placeholder="e.g. Resentments, page 1"></div>
+    <div class="stack" style="margin-top:14px">
+      <button class="btn primary block" data-x="ocr">Turn into editable text</button>
+      <button class="btn block" data-x="photo">Keep the photo only</button>
+      <button class="btn ghost block" data-x="no">Cancel</button>
+      <p class="hint" style="margin:0">Text conversion happens entirely on this phone. Neat printing works best; cursive may need more fixing.</p></div>`);
+  const title = () => m.el.querySelector('#pg-title').value.trim();
+  m.el.querySelector('[data-x=no]').onclick = m.close;
+  m.el.querySelector('[data-x=photo]').onclick = async () => { await s4Put({ id: newId(), type: 'page', title: title(), image, text: '' }); m.close(); toast('Saved on this phone.'); renderView(); };
+  m.el.querySelector('[data-x=ocr]').onclick = async () => {
+    const page = { id: newId(), type: 'page', title: title(), image, text: '' };
+    m.close(); await s4Ocr(page);
+  };
+}
+async function s4Ocr(page) {
+  const m = modal(`<h2>Reading your handwriting…</h2><p class="muted small">This happens on your phone and can take up to a minute. The first time is slower while it gets ready.</p>
+    <div style="background:var(--surface-2);border-radius:999px;height:10px;overflow:hidden"><div id="ocr-bar" style="height:100%;width:2%;background:var(--gold);transition:width .3s"></div></div>
+    <p class="center small muted" id="ocr-pct">Getting ready…</p>`);
+  m.el.parentElement.onclick = null;
+  try {
+    page.text = await readHandwriting(page.image, (p) => {
+      const bar = m.el.querySelector('#ocr-bar'); if (bar) bar.style.width = Math.max(2, p) + '%';
+      const t = m.el.querySelector('#ocr-pct'); if (t) t.textContent = p + '%';
+    });
+    await s4Put(page); m.close();
+    toast(page.text ? 'Done. Review and fix the text.' : "Couldn't find readable text. You can type it in.", 3500);
+    S.s4 = await s4All(); ACT.s4Page({ dataset: { id: page.id } });
+  } catch (e) { m.close(); await s4Put(page); toast('Text conversion failed, but the photo was saved. ' + errMsg(e), 5000); renderView(); }
+}
+ACT.s4Page = (el) => {
+  const p = S.s4.find((x) => x.id === el.dataset.id); if (!p) return;
+  const m = modal(`<h2>${esc(p.title || 'Page')}</h2>
+    ${p.image ? `<details ${p.text ? '' : 'open'}><summary class="small muted" style="cursor:pointer;margin-bottom:8px">Show the photo</summary>
+      <img src="${p.image}" alt="" style="width:100%;border-radius:12px"></details>` : ''}
+    <div class="stack" style="margin-top:12px">
+      <div><label for="pg-t">Title</label><input id="pg-t" type="text" maxlength="120" value="${esc(p.title || '')}"></div>
+      <div><label for="pg-x">Text</label><textarea id="pg-x" style="min-height:240px">${esc(p.text || '')}</textarea>
+        <p class="hint">Edit freely. Compare with the photo to fix any words the phone misread.</p></div>
+      <div class="row"><button class="btn ghost block" data-x="no">Close</button><button class="btn primary block" data-x="save">Save</button></div>
+      ${p.image && !p.text ? '<button class="btn block" data-x="ocr">Turn photo into text</button>' : ''}
+      <button class="btn danger block" data-x="del">Delete page</button></div>`);
+  m.el.querySelector('[data-x=no]').onclick = () => { m.close(); renderView(); };
+  m.el.querySelector('[data-x=save]').onclick = async () => {
+    p.title = m.el.querySelector('#pg-t').value.trim(); p.text = m.el.querySelector('#pg-x').value;
+    await s4Put(p); m.close(); toast('Saved on this phone.'); renderView();
+  };
+  const o = m.el.querySelector('[data-x=ocr]'); if (o) o.onclick = () => { m.close(); s4Ocr(p); };
+  m.el.querySelector('[data-x=del]').onclick = async () => { if (!(await confirmBox('Delete this page?', 'The photo and text will be removed from this phone.', 'Delete', true))) return; await s4Del(p.id); m.close(); renderView(); };
+};
+
+// PDF, backup, restore
+async function deliverFile(blob, name) {
+  const file = new File([blob], name, { type: blob.type || 'application/octet-stream' });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try { await navigator.share({ files: [file], title: name }); return; } catch (e) { if (e.name === 'AbortError') return; }
+  }
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = name;
+  document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 15000);
+}
+async function buildPdf(records, includePhotos) {
+  await loadScript('jspdf.umd.min.js');
+  const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'letter' });
+  const M = 54, W = 612 - 2 * M, H = 792; let y = M;
+  const clean = (s) => String(s || '').replace(/[^\x09\x0A\x0D\x20-\x7E\u00A0-\u00FF\u2018\u2019\u201C\u201D\u2013\u2014\u2026]/g, '');
+  const write = (text, size = 11, style = 'normal', gap = 4, color = [30, 42, 71]) => {
+    doc.setFont('helvetica', style); doc.setFontSize(size); doc.setTextColor(...color);
+    for (const line of doc.splitTextToSize(clean(text), W)) {
+      if (y + size > H - M) { doc.addPage(); y = M; }
+      doc.text(line, M, y + size); y += size * 1.35;
+    }
+    y += gap;
+  };
+  write('Step 4 Inventory', 22, 'bold', 2);
+  write(`Prepared ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })} · Confidential`, 10, 'normal', 16, [106, 112, 136]);
+  const rows = records.filter((r) => r.type === 'row'), pages = records.filter((r) => r.type === 'page');
+  if (rows.length) {
+    write('Five-column inventory', 16, 'bold', 8);
+    rows.forEach((r, i) => {
+      write(`${i + 1}. ${r.person || 'Untitled'}`, 13, 'bold', 2);
+      COLS.slice(1).forEach(([k, l]) => { if (r[k]) { write(l, 9, 'bold', 0, [106, 112, 136]); write(r[k], 11, 'normal', 6); } });
+      y += 8;
+    });
+  }
+  if (pages.length) {
+    if (rows.length) { doc.addPage(); y = M; }
+    write('Handwritten pages', 16, 'bold', 8);
+    for (const p of pages) {
+      write(p.title || 'Untitled page', 13, 'bold', 4);
+      if (p.text) write(p.text, 11, 'normal', 8);
+      if (includePhotos && p.image) {
+        const img = new Image(); img.src = p.image; await img.decode();
+        let w = W, h = (img.naturalHeight / img.naturalWidth) * w;
+        if (h > H - 2 * M) { h = H - 2 * M; w = (img.naturalWidth / img.naturalHeight) * h; }
+        if (y + h > H - M) { doc.addPage(); y = M; }
+        doc.addImage(p.image, 'JPEG', M, y, w, h); y += h + 14;
+      }
+      y += 8;
+    }
+  }
+  if (!rows.length && !pages.length) write('No entries yet.', 11);
+  return doc.output('blob');
+}
+async function pdfFlow(records) {
+  const hasPhotos = records.some((r) => r.type === 'page' && r.image);
+  const m = modal(`<h2>Save as PDF</h2>
+    <p class="muted small">A PDF is <strong>not</strong> encrypted. Anyone who opens the file can read it. Keep it somewhere private, or print it and delete the file.</p>
+    ${hasPhotos ? '<label style="display:flex;gap:10px;align-items:center;font-weight:500"><input type="checkbox" id="pdf-ph" checked style="width:auto"> Include photos of handwritten pages</label>' : ''}
+    <div class="row" style="margin-top:16px"><button class="btn ghost block" data-x="no">Cancel</button><button class="btn primary block" data-x="go">Create PDF</button></div>`);
+  m.el.querySelector('[data-x=no]').onclick = m.close;
+  const go = m.el.querySelector('[data-x=go]');
+  go.onclick = () => busy(go, async () => {
+    try { const blob = await buildPdf(records, !!m.el.querySelector('#pdf-ph')?.checked); m.close(); await deliverFile(blob, `step4-inventory-${todayNY()}.pdf`); }
+    catch (e) { toast(errMsg(e), 4000); }
+  });
+}
+ACT.s4Pdf = () => pdfFlow(S.s4 || []);
+
+async function encryptBackup(records, pass) {
+  const salt = rand(16), iv = rand(12);
+  const ct = new Uint8Array(await crypto.subtle.encrypt({ name: 'AES-GCM', iv }, await kekFrom(pass, salt),
+    new TextEncoder().encode(JSON.stringify({ v: 1, exported: new Date().toISOString(), records }))));
+  return new Blob([JSON.stringify({ app: 'new-mercies-step4', v: 1, salt: b64e(salt), iv: b64e(iv), ct: b64e(ct) })], { type: 'application/octet-stream' });
+}
+async function decryptBackup(file, pass) {
+  let j; try { j = JSON.parse(await file.text()); } catch (_) { j = null; }
+  if (!j || j.app !== 'new-mercies-step4') throw new Error("That file isn't a New Mercies Step 4 backup.");
+  try {
+    const pt = await crypto.subtle.decrypt({ name: 'AES-GCM', iv: b64d(j.iv) }, await kekFrom(pass, b64d(j.salt)), b64d(j.ct));
+    return JSON.parse(new TextDecoder().decode(pt)).records || [];
+  } catch (_) { throw new Error('Wrong backup password.'); }
+}
+ACT.s4Backup = () => {
+  const m = modal(`<h2>Encrypted backup</h2>
+    <p class="muted small">Choose a backup password. You'll need it to restore. If you forget it, the backup can't be opened by anyone, including you.</p>
+    <div class="stack"><div><label for="bk1">Backup password</label><input id="bk1" type="password" autocomplete="new-password"></div>
+    <div><label for="bk2">Confirm</label><input id="bk2" type="password" autocomplete="new-password"></div><p class="error" id="bk-err"></p>
+    <div class="row"><button class="btn ghost block" data-x="no">Cancel</button><button class="btn primary block" data-x="go">Create backup</button></div></div>`);
+  m.el.querySelector('[data-x=no]').onclick = m.close;
+  const go = m.el.querySelector('[data-x=go]');
+  go.onclick = () => busy(go, async () => {
+    const a = m.el.querySelector('#bk1').value, b = m.el.querySelector('#bk2').value, err = m.el.querySelector('#bk-err');
+    if (a.length < 8) { err.textContent = 'Use at least 8 characters.'; return; }
+    if (a !== b) { err.textContent = "Passwords don't match."; return; }
+    const blob = await encryptBackup(await s4All(), a); m.close();
+    await deliverFile(blob, `new-mercies-step4-backup-${todayNY()}.nmb`);
+    toast('Backup created. Store it somewhere safe.', 3500);
+  });
+};
+function backupPicker(title, note, okLabel, onOk) {
+  const m = modal(`<h2>${esc(title)}</h2><p class="muted small">${note}</p>
+    <div class="stack"><div><label for="rs-f">Backup file</label><input id="rs-f" type="file" accept=".nmb,application/octet-stream,*/*"></div>
+    <div><label for="rs-p">Backup password</label><input id="rs-p" type="password"></div><p class="error" id="rs-err"></p>
+    <div class="row"><button class="btn ghost block" data-x="no">Cancel</button><button class="btn primary block" data-x="go">${esc(okLabel)}</button></div></div>`);
+  m.el.querySelector('[data-x=no]').onclick = m.close;
+  const go = m.el.querySelector('[data-x=go]');
+  go.onclick = () => busy(go, async () => {
+    const f = m.el.querySelector('#rs-f').files[0], err = m.el.querySelector('#rs-err');
+    if (!f) { err.textContent = 'Choose your backup file.'; return; }
+    try { const recs = await decryptBackup(f, m.el.querySelector('#rs-p').value); m.close(); await onOk(recs); }
+    catch (e) { err.textContent = errMsg(e); }
+  });
+}
+ACT.s4Restore = () => backupPicker('Restore from a backup', 'Entries from the backup are added to this phone. Entries already here stay.', 'Restore', async (recs) => {
+  for (const r of recs) await s4Put(r);
+  toast(`Restored ${recs.length} ${recs.length === 1 ? 'item' : 'items'}.`); renderView();
+});
+// Open a backup without an account (for someone who has left the group)
+ACT.openBackupNoAccount = () => backupPicker('Open a Step 4 backup', "Read a backup you made earlier, even without an account. You'll get a PDF of its contents.", 'Open', (recs) => pdfFlow(recs));
+
 
 // ---------- Wiring -------------------------------------------------------
 document.addEventListener('click', (e) => {
