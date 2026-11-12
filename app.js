@@ -677,7 +677,7 @@ async function viewMe(view) {
   const d = daysFor(S.me), chip = chipFor(d), next = nextChip(d);
   const ps = await pushState();
   const pushHtml = {
-    on: `<p class="small muted" style="margin-top:0">Notifications are on for this phone.</p><button class="btn sm" data-act="testPush">Send a test</button>`,
+    on: `<p class="small muted" style="margin-top:0">Notifications are on for this phone.</p><div class="row wrap"><button class="btn sm" data-act="testPush">Send a test</button><button class="btn sm ghost" data-act="enablePush">Re-register this phone</button></div>`,
     off: `<p class="small muted" style="margin-top:0">Turn these on so you hear about SOS alerts and get a gentle reminder to check in.</p><button class="btn primary sm" data-act="enablePush">Turn on notifications</button>`,
     denied: `<p class="small muted" style="margin-top:0">Notifications are blocked. Allow them for this app in your phone's settings, then come back here.</p>`,
     unsupported: isIOS() && !isStandalone()
@@ -739,6 +739,8 @@ ACT.enablePush = (btn) => busy(btn, async () => {
     if (perm !== 'granted') return toast('Notifications were not allowed.');
     const reg = await navigator.serviceWorker.ready;
     const { publicKey } = await callFn('notify', { action: 'vapid' });
+    const old = await reg.pushManager.getSubscription();
+    if (old) await old.unsubscribe(); // start clean so the phone and server always match
     const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64urlToU8(publicKey) });
     const j = sub.toJSON();
     const { error } = await sb.rpc('save_push_subscription', { p_endpoint: j.endpoint, p_p256dh: j.keys.p256dh, p_auth: j.keys.auth });
@@ -748,7 +750,12 @@ ACT.enablePush = (btn) => busy(btn, async () => {
   } catch (e) { toast(errMsg(e), 3500); }
 });
 ACT.testPush = (btn) => busy(btn, async () => {
-  try { const r = await callFn('notify', { action: 'test' }); toast(r.sent ? 'Test sent. Check your notifications.' : 'No device registered. Try turning notifications on again.'); }
+  try {
+    const r = await callFn('notify', { action: 'test' });
+    if (r.sent) toast('Test sent. Check your notifications.');
+    else if (!r.devices) toast('The server has no record of this phone. Tap "Re-register this phone."', 4500);
+    else toast('Delivery failed: ' + (r.errors?.[0] || 'unknown error'), 7000);
+  }
   catch (e) { toast(errMsg(e)); }
 });
 
