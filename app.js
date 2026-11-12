@@ -992,7 +992,8 @@ async function viewStudy(view) {
       <p style="margin:4px 0 0;color:#D8DCEA" class="small">Five-column inventory and handwritten pages, encrypted and never uploaded.</p></div>
       <span style="font-size:1.6rem;color:#FBD98A">›</span></div></div>
     ${st.principles.length ? `<div class="section-title">The principles</div><div class="card">${st.principles.map((p) => item('principle', p)).join('')}</div>` : ''}
-    ${st.steps.length ? `<div class="section-title">The steps</div><div class="card">${st.steps.map((p) => item('step', p)).join('')}</div>` : ''}`;
+    ${st.steps.length ? `<div class="section-title">The steps</div><div class="card">${st.steps.map((p) => item('step', p)).join('')}</div>` : ''}
+    ${st.credit ? `<p class="hint" style="margin-top:16px">${esc(st.credit)}</p>` : ''}`;
 }
 ACT.studyItem = (el) => {
   const st = window.NM_STUDY || {}; const kind = el.dataset.kind; const n = Number(el.dataset.n);
@@ -1001,6 +1002,7 @@ ACT.studyItem = (el) => {
   const m = modal(`<div class="section-title" style="margin-top:0">${kind === 'step' ? 'Step' : 'Principle'} ${n}</div>
     <h2>${esc(title)}</h2>
     ${x.text ? `<p style="white-space:pre-wrap">${esc(x.text)}</p>` : '<p class="muted">Text coming soon.</p>'}
+    ${x.relatesTo ? `<p class="small muted" style="margin-top:-4px">${esc(x.relatesTo)}</p>` : ''}
     ${(x.verses || []).map((v) => `<div class="card verse"><div class="ref">${esc(v.ref)}</div><p class="serif">${esc(v.text)}</p></div>`).join('')}
     ${kind === 'step' ? (n === S.me.current_step ? '<p class="small muted center">This is the step you\'re working on.</p>'
       : `<button class="btn block" data-x="cur">I'm working on this step</button>`) : ''}

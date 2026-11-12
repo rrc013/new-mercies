@@ -1,7 +1,7 @@
 // New Mercies service worker: offline shell + push notifications.
 // Bump VERSION whenever you upload new app files.
-const VERSION = 'nm-v5';
-const SHELL = ['./', 'index.html', 'styles.css?v=4', 'app.js?v=4', 'verses.js?v=4', 'study.js?v=4',
+const VERSION = 'nm-v6';
+const SHELL = ['./', 'index.html', 'styles.css?v=5', 'app.js?v=5', 'verses.js?v=5', 'study.js?v=5',
   'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon.svg'];
 
 self.addEventListener('install', (e) => {
