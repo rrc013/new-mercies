@@ -146,7 +146,7 @@ async function checkPin(pin) {
 function keypad(onDone, title, subtitle = '', showForgot = false) {
   let pin = '';
   $app.innerHTML = `<div class="screen plain center">
-    <div class="auth-hero" style="padding-bottom:0"><img src="icons/icon-192.png" alt=""><h1>${esc(title)}</h1>
+    <div class="auth-hero" style="padding-bottom:0"><img src="icon-192.png" alt=""><h1>${esc(title)}</h1>
     <p class="muted" id="kp-sub">${subtitle}</p></div>
     <div class="pin-dots" id="kp-dots">${'<span></span>'.repeat(CONFIG.pinLength)}</div>
     <div class="keypad" id="kp">
@@ -202,7 +202,7 @@ function renderAuth(mode = 'signin', notice = '') {
   S.unlocked = false;
   const today = todayNY();
   $app.innerHTML = `<div class="screen plain">
-    <div class="auth-hero"><img src="icons/icon-192.png" alt=""><h1>New Mercies</h1>
+    <div class="auth-hero"><img src="icon-192.png" alt=""><h1>New Mercies</h1>
       <p class="muted serif">"They are new every morning."</p></div>
     ${notice ? `<div class="card small">${esc(notice)}</div>` : ''}
     <div class="tabs"><button data-act="authTab" data-mode="signin" class="${mode === 'signin' ? 'on' : ''}">Sign in</button>
@@ -266,7 +266,7 @@ ACT.join = (btn) => busy(btn, async () => {
 });
 
 function renderForcePassword() {
-  $app.innerHTML = `<div class="screen plain"><div class="auth-hero"><img src="icons/icon-192.png" alt="">
+  $app.innerHTML = `<div class="screen plain"><div class="auth-hero"><img src="icon-192.png" alt="">
     <h1>Choose a new password</h1><p class="muted">Your moderator reset your password. Pick a new one only you know.</p></div>
     <div class="card stack">
       <div><label for="fp1">New password</label><input id="fp1" type="password" autocomplete="new-password"></div>
@@ -390,7 +390,7 @@ const statusPill = (s) => s ? `<span class="pill ${s}">${esc(STATUS[s].label)}</
 async function viewToday(view) {
   const v = verseOfDay();
   const d = daysFor(S.me);
-  let html = `<div class="topbar"><div class="brand"><img src="icons/icon-192.png" alt=""><h1>New Mercies</h1></div>
+  let html = `<div class="topbar"><div class="brand"><img src="icon-192.png" alt=""><h1>New Mercies</h1></div>
     <span class="pill gold">${esc(daysLabel(d))}</span></div>
     <div class="card verse"><div class="ref">Verse of the day · ${esc(v[0])}</div><p class="serif">${esc(v[1])}</p></div>`;
 

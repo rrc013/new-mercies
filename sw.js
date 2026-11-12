@@ -1,8 +1,8 @@
 // New Mercies service worker: offline shell + push notifications.
 // Bump VERSION whenever you upload new app files.
-const VERSION = 'nm-v1';
+const VERSION = 'nm-v2';
 const SHELL = ['./', 'index.html', 'styles.css?v=1', 'app.js?v=1', 'verses.js?v=1',
-  'manifest.webmanifest', 'icons/icon-192.png', 'icons/icon-512.png', 'icons/icon.svg'];
+  'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon.svg'];
 
 self.addEventListener('install', (e) => {
   e.waitUntil(caches.open(VERSION).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting()));
@@ -30,7 +30,7 @@ self.addEventListener('push', (e) => {
   let data = { title: 'New Mercies', body: 'Open the app.', url: './' };
   try { data = { ...data, ...e.data.json() }; } catch (_) {}
   e.waitUntil(self.registration.showNotification(data.title, {
-    body: data.body, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', data: { url: data.url },
+    body: data.body, icon: 'icon-192.png', badge: 'icon-192.png', data: { url: data.url },
   }));
 });
 self.addEventListener('notificationclick', (e) => {
