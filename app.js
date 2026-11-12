@@ -182,7 +182,7 @@ function renderSetPin() {
 }
 
 function renderLock() {
-  S.unlocked = false; closeVault();
+  S.unlocked = false; closeVault(); if (typeof TTS !== 'undefined') ttsStop();
   keypad(async (pin, api) => {
     if (await checkPin(pin)) { localStorage.removeItem(FAIL_KEY); openVault(pin); S.unlocked = true; return enterApp(); }
     const fails = Number(localStorage.getItem(FAIL_KEY) || 0) + 1;
@@ -368,6 +368,7 @@ function go(tab) {
 ACT.tab = (el) => go(el.dataset.tab);
 
 async function renderView() {
+  if (typeof TTS !== 'undefined') ttsStop();
   const view = document.getElementById('view');
   if (!view) return;
   try {
@@ -979,40 +980,183 @@ const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2
 
 // ---------- Study tab ----------------------------------------------------
 async function viewStudy(view) {
-  if (S.studySub === 'step4') return viewStep4(view);
-  const st = window.NM_STUDY || { principles: [], steps: [] };
-  const item = (kind, x) => `<div class="member-row" data-act="studyItem" data-kind="${kind}" data-n="${x.n}">
-    <div class="avatar">${x.n}</div><div class="info"><div class="name">${esc(x.title || (kind === 'step' ? `Step ${x.n}` : `Principle ${x.n}`))}</div>
-    <div class="small muted" style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.text ? x.text.split('\n')[0] : 'Text coming soon')}</div></div>
-    ${kind === 'step' && x.n === S.me.current_step ? '<span class="pill gold">Current</span>' : '<span class="muted">›</span>'}</div>`;
+  const sub = S.studySub || '';
+  if (sub === 'step4') return viewStep4(view);
+  const st = window.NM_STUDY || {};
+  const back = (to, label = 'Study') => `<div class="topbar"><button class="btn sm ghost" data-act="studyGo" data-to="${to}">‹ ${esc(label)}</button>${to === 'lessons' ? fontCtl() : ''}</div>`;
+  if (sub === 'prayer') {
+    const p = st.prayer || { lines: [] };
+    view.innerHTML = back('') + `<h1>${esc(p.title || 'The Serenity Prayer')}</h1>
+      <div class="card verse center" style="padding:24px 18px">${p.lines.map((l) => l ? `<p class="serif" style="margin:0 0 6px;font-size:1.08rem">${esc(l)}</p>` : '<div style="height:10px"></div>').join('')}
+      <p class="small" style="margin-top:14px;color:#FBD98A">${esc(p.author || '')}</p></div>`;
+    return;
+  }
+  if (sub === 'principles' || sub === 'steps') {
+    const kind = sub === 'steps' ? 'step' : 'principle';
+    const list = (sub === 'steps' ? st.steps : st.principles) || [];
+    view.innerHTML = back('') + `<h1>${sub === 'steps' ? 'The 12 Steps' : 'The 8 Principles'}</h1>
+      <div class="card">${list.map((x) => `<div class="member-row" data-act="studyItem" data-kind="${kind}" data-n="${x.n}">
+        <div class="avatar">${x.n}</div><div class="info"><div class="small" style="line-height:1.4">${esc(x.text)}</div>
+        ${x.relatesTo ? `<div class="small muted" style="margin-top:4px">${esc(x.relatesTo)}</div>` : ''}</div>
+        ${kind === 'step' && x.n === S.me.current_step ? '<span class="pill gold">Current</span>' : '<span class="muted">›</span>'}</div>`).join('')}</div>
+      ${st.credit ? `<p class="hint">${esc(st.credit)}</p>` : ''}`;
+    return;
+  }
+  if (sub === 'guidelines') {
+    const g = st.guidelines || { items: [] };
+    const card = (x) => `<div class="card"><div class="row" style="align-items:flex-start;gap:12px"><div class="avatar" style="flex:none">${x.n}</div>
+      <div><strong>${esc(x.lead)}</strong>${x.text.split('\n\n').map((t) => `<p class="small" style="margin:8px 0 0">${esc(t)}</p>`).join('')}</div></div></div>`;
+    view.innerHTML = back('') + `<h1>Small Group Guidelines</h1><p class="muted">${esc(g.intro || '')}</p>
+      ${g.items.map(card).join('')}
+      ${g.online ? `<div class="section-title">Online groups</div><p class="small muted">${esc(g.onlineIntro || '')}</p>${g.online.map(card).join('')}` : ''}
+      ${g.closing ? `<p class="small muted">${esc(g.closing)}</p>` : ''}`;
+    return;
+  }
+  if (sub === 'lessons') {
+    S.lessonList = window.NM_LESSONS || [];
+    const tag = (l) => { const p = (l.head || []).find((h) => h.k === 'principle'); const m = p && p.text.match(/^(Principles? [\d and,]+)/); return m ? m[1].trim() : ''; };
+    view.innerHTML = back('') + `<h1>Lessons</h1>
+      ${S.lessonList.length ? `<div class="card">${S.lessonList.map((l) => `<div class="member-row" data-act="openLesson" data-n="${l.n}">
+        <div class="avatar">${l.n}</div><div class="info"><div class="name">${esc(l.title)}</div>
+        <div class="small muted">${esc(tag(l))}</div></div><span class="muted">›</span></div>`).join('')}</div>`
+        : '<div class="empty">No lessons have been added yet.</div>'}
+      ${st.lessonsCredit ? `<p class="hint">${esc(st.lessonsCredit)}</p>` : ''}`;
+    return;
+  }
+  if (sub.startsWith('lesson:')) return viewLesson(view, Number(sub.slice(7)));
+
+  const tile = (to, icon, title, subtitle, wide) => `<button class="tile${wide ? ' wide' : ''}" data-act="studyGo" data-to="${to}">
+    <span class="tile-icon">${icon}</span><span class="tile-title">${title}</span><span class="tile-sub">${subtitle}</span></button>`;
   view.innerHTML = topbar('Study') + `
     <div class="card verse" data-act="openStep4" style="cursor:pointer">
       <div class="ref">Private · only on this phone</div>
       <div class="row between"><div><h2 style="margin:0;color:#fff">My Step 4 inventory</h2>
       <p style="margin:4px 0 0;color:#D8DCEA" class="small">Five-column inventory and handwritten pages, encrypted and never uploaded.</p></div>
       <span style="font-size:1.6rem;color:#FBD98A">›</span></div></div>
-    ${st.principles.length ? `<div class="section-title">The principles</div><div class="card">${st.principles.map((p) => item('principle', p)).join('')}</div>` : ''}
-    ${st.steps.length ? `<div class="section-title">The steps</div><div class="card">${st.steps.map((p) => item('step', p)).join('')}</div>` : ''}
-    ${st.credit ? `<p class="hint" style="margin-top:16px">${esc(st.credit)}</p>` : ''}`;
+    <div class="tiles">
+      ${tile('prayer', '🕊️', 'Serenity Prayer', 'Pray it daily')}
+      ${tile('principles', '⛰️', '8 Principles', 'The Road to Recovery')}
+      ${tile('steps', '🪜', '12 Steps', 'With Bible verses')}
+      ${tile('guidelines', '🤝', 'Small Group Guidelines', 'Keeping group safe')}
+      ${tile('lessons', '📖', 'Lessons', '25 lessons on the principles', true)}
+    </div>`;
 }
-ACT.studyItem = (el) => {
-  const st = window.NM_STUDY || {}; const kind = el.dataset.kind; const n = Number(el.dataset.n);
-  const x = (kind === 'step' ? st.steps : st.principles).find((i) => i.n === n); if (!x) return;
-  const title = x.title || (kind === 'step' ? `Step ${n}` : `Principle ${n}`);
-  const m = modal(`<div class="section-title" style="margin-top:0">${kind === 'step' ? 'Step' : 'Principle'} ${n}</div>
-    <h2>${esc(title)}</h2>
-    ${x.text ? `<p style="white-space:pre-wrap">${esc(x.text)}</p>` : '<p class="muted">Text coming soon.</p>'}
-    ${x.relatesTo ? `<p class="small muted" style="margin-top:-4px">${esc(x.relatesTo)}</p>` : ''}
-    ${(x.verses || []).map((v) => `<div class="card verse"><div class="ref">${esc(v.ref)}</div><p class="serif">${esc(v.text)}</p></div>`).join('')}
-    ${kind === 'step' ? (n === S.me.current_step ? '<p class="small muted center">This is the step you\'re working on.</p>'
-      : `<button class="btn block" data-x="cur">I'm working on this step</button>`) : ''}
-    ${kind === 'step' && n === 4 ? '<button class="btn primary block" data-x="s4" style="margin-top:8px">Open my Step 4 inventory</button>' : ''}
-    <button class="btn ghost block" data-x="close" style="margin-top:8px">Close</button>`);
-  m.el.querySelector('[data-x=close]').onclick = m.close;
-  const cur = m.el.querySelector('[data-x=cur]');
-  if (cur) cur.onclick = async () => { const { error } = await sb.rpc('set_step', { p_step: n }); if (error) return toast(errMsg(error)); S.me.current_step = n; m.close(); toast(`Working on step ${n}.`); renderView(); };
-  const s4 = m.el.querySelector('[data-x=s4]');
-  if (s4) s4.onclick = () => { m.close(); ACT.openStep4(); };
+ACT.studyGo = (el) => { S.studySub = el.dataset.to || null; renderView(); window.scrollTo(0, 0); };
+
+// Lesson reader
+const FS_KEY = 'nm-lesson-size';
+const fontCtl = () => `<div class="row" style="gap:6px"><button class="btn sm ghost" data-act="fontSize" data-d="-1" aria-label="Smaller text">A−</button><button class="btn sm ghost" data-act="fontSize" data-d="1" aria-label="Larger text">A+</button></div>`;
+ACT.fontSize = (el) => {
+  const v = Math.max(14, Math.min(24, Number(localStorage.getItem(FS_KEY) || 17) + Number(el.dataset.d)));
+  localStorage.setItem(FS_KEY, String(v));
+  const body = document.getElementById('lesson-body'); if (body) body.style.fontSize = v + 'px';
+};
+ACT.openLesson = (el) => { S.studySub = 'lesson:' + el.dataset.n; renderView(); window.scrollTo(0, 0); };
+async function viewLesson(view, n) {
+  const all = window.NM_LESSONS || [];
+  const l = all.find((x) => x.n === n);
+  if (!l) { view.innerHTML = '<div class="empty">Lesson not found.</div>'; return; }
+  const total = all.length;
+  const size = Number(localStorage.getItem(FS_KEY) || 17);
+  let html = '', inList = false, inAc = false;
+  const close = () => { if (inList) { html += '</ul>'; inList = false; } if (inAc) { html += '</div>'; inAc = false; } };
+  for (const [t, x] of l.blocks) {
+    if (t !== 'li' && inList) { html += '</ul>'; inList = false; }
+    if (t !== 'ac' && inAc) { html += '</div>'; inAc = false; }
+    const sp = 'data-sp data-act="ttsFrom"';
+    if (t === 'h') html += `<h2 class="lesson-h" ${sp}>${esc(x)}</h2>`;
+    else if (t === 'h3') html += `<h3 class="lesson-h3" ${sp}>${esc(x)}</h3>`;
+    else if (t === 'li') { if (!inList) { html += '<ul class="lesson-ul">'; inList = true; } html += `<li ${sp}>${esc(x)}</li>`; }
+    else if (t === 'acro') html += `<div class="acro-word">${esc(x)}</div>`;
+    else if (t === 'ac') { if (!inAc) { html += '<div class="acro">'; inAc = true; } html += `<div ${sp}><b>${esc(x.charAt(0))}</b>${esc(x.slice(1))}</div>`; }
+    else if (t === 'v') html += `<p class="serif lesson-v" ${sp}>${esc(x)}</p>`;
+    else html += `<p ${sp}>${esc(x)}</p>`;
+  }
+  close();
+  view.innerHTML = `<div class="topbar"><button class="btn sm ghost" data-act="studyGo" data-to="lessons">‹ Lessons</button>${fontCtl()}</div>
+    <div id="lesson-wrap"><div class="section-title" style="margin-top:0">Lesson ${l.n} of ${total}</div><h1 data-sp data-act="ttsFrom">${esc(l.title)}</h1>
+    ${ttsSupported() ? `<div class="tts-bar" id="tts-bar"></div>` : ''}
+    ${(l.head || []).length ? `<div class="card verse">${l.head.map((h) => h.k === 'verse'
+      ? `<p class="serif" style="margin:0 0 12px;font-size:.98rem" data-sp data-act="ttsFrom">${esc(h.text)}</p>`
+      : `<p style="margin:0 0 6px;color:#FBD98A;font-weight:600;font-size:.92rem" data-sp data-act="ttsFrom">${esc(h.text)}</p>`).join('')}</div>` : ''}
+    <div id="lesson-body" class="lesson" style="font-size:${size}px">${html}</div></div>
+    <div class="row" style="margin-top:20px">
+      ${n > 1 ? `<button class="btn block" data-act="openLesson" data-n="${n - 1}">‹ Lesson ${n - 1}</button>` : '<span style="flex:1"></span>'}
+      ${n < total ? `<button class="btn primary block" data-act="openLesson" data-n="${n + 1}">Lesson ${n + 1} ›</button>` : ''}</div>`;
+  ttsBuildQueue(); ttsBar();
+}
+
+// Read aloud: uses the phone's own text-to-speech voice
+const TTS = { q: [], pos: 0, playing: false, cur: null, wake: null, touched: 0, rate: Number(localStorage.getItem('nm-tts-rate') || 1) };
+const RATES = [0.85, 1, 1.15, 1.3];
+function ttsSupported() { return 'speechSynthesis' in window && 'SpeechSynthesisUtterance' in window; }
+function ttsVoice() {
+  const vs = speechSynthesis.getVoices().filter((v) => /^en([-_]|$)/i.test(v.lang));
+  return vs.find((v) => v.localService && /en[-_]US/i.test(v.lang)) || vs.find((v) => v.localService) || vs.find((v) => /en[-_]US/i.test(v.lang)) || vs[0] || null;
+}
+function ttsText(t) {
+  return t.replace(/\b(\d+):(\d+)\s*[-–]\s*(\d+)/g, '$1, verses $2 to $3').replace(/\b(\d+):(\d+)/g, '$1, verse $2')
+    .replace(/[“”"]/g, '').replace(/\(([A-Z]{2,4})\)/g, '').replace(/\s+/g, ' ').trim();
+}
+function ttsChunks(t) {
+  const parts = t.match(/[^.!?]+[.!?]+['’”)]*\s*|[^.!?]+$/g) || [t]; const out = []; let cur = '';
+  for (const p of parts) { if (cur && (cur + p).length > 220) { out.push(cur); cur = p; } else cur += p; }
+  if (cur.trim()) out.push(cur); return out;
+}
+function ttsBuildQueue() {
+  TTS.q = []; TTS.pos = 0;
+  document.querySelectorAll('#lesson-wrap [data-sp]').forEach((el) => ttsChunks(ttsText(el.textContent)).forEach((c) => c.trim() && TTS.q.push({ el, text: c.trim() })));
+}
+function ttsMark(el) {
+  document.querySelectorAll('.speaking').forEach((x) => x.classList.remove('speaking'));
+  if (!el) return; el.classList.add('speaking');
+  if (Date.now() - TTS.touched < 4000) return; // the reader is scrolling or tapping; don't move the page under them
+  const r = el.getBoundingClientRect(); if (r.top < 120 || r.bottom > innerHeight - 140) el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+}
+function ttsNext() {
+  if (!TTS.playing) return;
+  if (TTS.pos >= TTS.q.length) { ttsStop(); toast('End of lesson.'); return; }
+  const it = TTS.q[TTS.pos]; ttsMark(it.el);
+  const u = new SpeechSynthesisUtterance(it.text); const v = ttsVoice();
+  if (v) { u.voice = v; u.lang = v.lang; } else u.lang = 'en-US';
+  u.rate = TTS.rate;
+  u.onend = () => { if (TTS.playing && TTS.cur === u) { TTS.pos++; ttsNext(); } };
+  u.onerror = (e) => { if (e.error === 'interrupted' || e.error === 'canceled' || TTS.cur !== u) return; TTS.pos++; ttsNext(); };
+  TTS.cur = u; speechSynthesis.speak(u);
+}
+function ttsPlay() {
+  if (!TTS.q.length) ttsBuildQueue();
+  speechSynthesis.cancel(); TTS.playing = true;
+  if (navigator.wakeLock && !TTS.wake) navigator.wakeLock.request('screen').then((l) => { TTS.wake = l; }).catch(() => {});
+  ttsBar(); setTimeout(ttsNext, 60);
+}
+function ttsPause() { TTS.playing = false; TTS.cur = null; if (ttsSupported()) speechSynthesis.cancel(); ttsBar(); }
+function ttsStop() {
+  const was = TTS.playing || TTS.pos > 0;
+  TTS.playing = false; TTS.cur = null; TTS.pos = 0;
+  if (was && ttsSupported()) speechSynthesis.cancel();
+  ttsMark(null); if (TTS.wake) { TTS.wake.release().catch(() => {}); TTS.wake = null; } ttsBar();
+}
+function ttsBar() {
+  const bar = document.getElementById('tts-bar'); if (!bar) return;
+  bar.innerHTML = `<button class="btn ${TTS.playing ? '' : 'primary'}" data-act="${TTS.playing ? 'ttsPause' : 'ttsPlay'}">${TTS.playing ? '❚❚ Pause' : (TTS.pos > 0 ? '▶ Resume' : '🔊 Listen')}</button>
+    ${TTS.playing || TTS.pos > 0 ? '<button class="btn" data-act="ttsStop" aria-label="Stop">■</button>' : ''}
+    <button class="btn" data-act="ttsRate" aria-label="Reading speed">${TTS.rate}×</button>
+    ${TTS.playing ? '<span class="small muted" style="flex-basis:100%">Tap any paragraph to jump there.</span>' : ''}`;
+}
+['touchstart', 'wheel', 'pointerdown'].forEach((ev) => addEventListener(ev, () => { TTS.touched = Date.now(); }, { passive: true }));
+ACT.ttsPlay = () => ttsPlay();
+ACT.ttsPause = () => ttsPause();
+ACT.ttsStop = () => ttsStop();
+ACT.ttsRate = () => {
+  TTS.rate = RATES[(RATES.indexOf(TTS.rate) + 1) % RATES.length] || 1;
+  localStorage.setItem('nm-tts-rate', String(TTS.rate));
+  if (TTS.playing) ttsPlay(); else ttsBar();
+};
+ACT.ttsFrom = (el) => {
+  if (!TTS.playing) return;
+  const i = TTS.q.findIndex((x) => x.el === el); if (i < 0) return;
+  TTS.pos = i; ttsPlay();
 };
 ACT.openStep4 = () => { S.studySub = 'step4'; renderView(); };
 ACT.closeStep4 = () => { S.studySub = null; renderView(); };
@@ -1333,7 +1477,8 @@ document.addEventListener('click', (e) => {
 document.addEventListener('visibilitychange', () => {
   if (document.hidden) { S.hiddenAt = Date.now(); return; }
   if (!S.unlocked) return;
-  if (Date.now() - S.hiddenAt > CONFIG.relockAfterMs) { closeModals(); renderLock(); }
+  if (Date.now() - S.hiddenAt > CONFIG.relockAfterMs) { closeModals(); renderLock(); return; }
+  if (TTS.playing && !speechSynthesis.speaking) ttsPlay(); // resume reading if the phone interrupted it
   else if (S.todayCheckin && S.todayCheckin.day !== todayNY()) { S.todayCheckin = null; go('today'); } // a new day began
 });
 

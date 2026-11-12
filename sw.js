@@ -1,7 +1,7 @@
 // New Mercies service worker: offline shell + push notifications.
 // Bump VERSION whenever you upload new app files.
-const VERSION = 'nm-v6';
-const SHELL = ['./', 'index.html', 'styles.css?v=5', 'app.js?v=5', 'verses.js?v=5', 'study.js?v=5',
+const VERSION = 'nm-v9';
+const SHELL = ['./', 'index.html', 'styles.css?v=7', 'app.js?v=7', 'verses.js?v=7', 'study.js?v=7', 'lessons.js?v=7',
   'manifest.webmanifest', 'icon-192.png', 'icon-512.png', 'icon.svg'];
 
 self.addEventListener('install', (e) => {
@@ -12,13 +12,20 @@ self.addEventListener('activate', (e) => {
     .then((keys) => Promise.all(keys.filter((k) => k !== VERSION).map((k) => caches.delete(k))))
     .then(() => self.clients.claim()));
 });
-// Network first for the app's own files, so updates show up; cache as fallback offline.
-// Never caches database or function traffic.
+// The app's own files: always ask GitHub whether there's a newer version (cheap check),
+// falling back to the saved copy when offline. Large engine files rarely change: saved copy first.
+const ENGINE = /(tesseract|worker\.min|jspdf|traineddata)/;
 self.addEventListener('fetch', (e) => {
   const url = new URL(e.request.url);
   if (e.request.method !== 'GET' || url.origin !== self.location.origin) return;
+  if (ENGINE.test(url.pathname)) {
+    e.respondWith(caches.match(e.request).then((hit) => hit || fetch(e.request).then((res) => {
+      const copy = res.clone(); caches.open(VERSION).then((c) => c.put(e.request, copy)); return res;
+    })));
+    return;
+  }
   e.respondWith(
-    fetch(e.request).then((res) => {
+    fetch(e.request, { cache: 'no-cache' }).then((res) => {
       const copy = res.clone();
       caches.open(VERSION).then((c) => c.put(e.request, copy));
       return res;

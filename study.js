@@ -1,4 +1,5 @@
 // Study content provided by group leadership. Edit freely; keep the same structure.
+// The lessons themselves are in lessons.js.
 window.NM_STUDY = {
   "principles": [
     {
@@ -231,5 +232,77 @@ window.NM_STUDY = {
       ]
     }
   ],
-  "credit": "Celebrate Recovery® 8 Recovery Principles and Christ-centered 12 Steps with Biblical comparisons. Includes material adapted from the 12 Suggested Steps of Alcoholics Anonymous. Scripture quotations marked NIV are taken from the Holy Bible, New International Version®, NIV®. Copyright © 1973, 1978, 1984, 2011 by Biblica, Inc.™ Used by permission. All rights reserved worldwide."
+  "credit": "Celebrate Recovery® 8 Recovery Principles and Christ-centered 12 Steps with Biblical comparisons. Includes material adapted from the 12 Suggested Steps of Alcoholics Anonymous. Scripture quotations marked NIV are taken from the Holy Bible, New International Version®, NIV®. Copyright © 1973, 1978, 1984, 2011 by Biblica, Inc.™ Used by permission. All rights reserved worldwide.",
+  "prayer": {
+    "title": "The Serenity Prayer",
+    "lines": [
+      "God, grant me the serenity",
+      "to accept the things I cannot change,",
+      "the courage to change the things I can,",
+      "and the wisdom to know the difference.",
+      "Living one day at a time,",
+      "enjoying one moment at a time;",
+      "accepting hardship as a pathway to peace;",
+      "taking, as Jesus did,",
+      "this sinful world as it is,",
+      "not as I would have it;",
+      "trusting that You will make all things right",
+      "if I surrender to Your will;",
+      "so that I may be reasonably happy in this life",
+      "and supremely happy with You forever in the next.",
+      "",
+      "Amen."
+    ],
+    "author": "Reinhold Niebuhr"
+  },
+  "guidelines": {
+    "intro": "The following Small Group Guidelines will ensure that your small group is a safe place.",
+    "items": [
+      {
+        "n": 1,
+        "lead": "Keep your sharing focused on your own thoughts and feelings, using “I” and “me” statements.",
+        "text": "It’s important to share your own thoughts, feelings, and actions, not another’s hurts, hang-ups, or habits, but your own. Sharing with the group how we are feeling and the impact of the hurt done to us helps us heal and grow through the hurt. Sticking to “I” or “me” statements, instead of “you” or “we” statements helps us focus on ourselves.\n\nLimit your sharing to three to five minutes, so everyone has an opportunity to share — and to ensure that one person does not dominate the group sharing time."
+      },
+      {
+        "n": 2,
+        "lead": "There is NO cross-talk.",
+        "text": "Cross-talk is when two individuals engage in conversation excluding all others. Each person is free to express his or her feelings without interruptions.\n\nCross-talk is also making distracting comments or questions while someone is sharing. This includes speaking to another member of the group while someone is sharing, or responding to what someone has shared during his or her time of sharing. This guideline is about respect. When other participants are sharing, we don't want to interrupt their thoughts and feelings, which may be very deep, painful, scary, sad, etc. Basically, anything that would give the speaker the impression that we don’t care about what they have to share, could be considered cross-talk."
+      },
+      {
+        "n": 3,
+        "lead": "We are here to support one another, not “fix” one another.",
+        "text": "This keeps us focused on our own issues.\n\nWe do not give advice or solve someone’s problem in our time of sharing or offer book referrals or counselor referrals!\n\nWe are not licensed counselors, psychologists, or therapists, nor are the group members. Celebrate Recovery groups are not designed for this. It is up to the participants to include outside counseling to their program when they’re ready."
+      },
+      {
+        "n": 4,
+        "lead": "Anonymity and confidentiality are basic requirements.",
+        "text": "What is shared in the group stays in the group. The only exception is when someone threatens to injure themselves or others. We are not to share information with our spouses/family/co-workers. This also means not discussing what is shared in the group among group members. This is called gossip.\n\nPlease be advised, if anyone threatens to hurt themselves or others, the Small Group Leader has the responsibility to report it to the Celebrate Recovery Ministry Leader."
+      },
+      {
+        "n": 5,
+        "lead": "Offensive language has no place in a Christ-centered recovery group.",
+        "text": "Therefore, we ask that you please watch your language. The main issue here is that the Lord’s name is not used inappropriately.\n\nWe also avoid graphic descriptions. If anyone feels uncomfortable with how explicitly a speaker is sharing regarding his/her behaviors, then you may indicate so by simply raising your hand. The speaker will then respect your boundaries by being less specific in his/her descriptions. This will avoid potential triggers that could cause a person to act out."
+      }
+    ],
+    "onlineIntro": "The following guidelines are to be used in all online Open Share Groups and Step studies.",
+    "online": [
+      {
+        "n": 6,
+        "lead": "All members must use headphones.",
+        "text": "This will ensure that no one else can overhear what is shared in the group."
+      },
+      {
+        "n": 7,
+        "lead": "All members must be on camera and alone in the room, with the camera facing them the whole time.",
+        "text": "If the group leader asks, they must show the rest of the group that no one else is in the room."
+      },
+      {
+        "n": 8,
+        "lead": "The meetings will not be recorded.",
+        "text": "This protects the confidentiality and anonymity of the meetings."
+      }
+    ],
+    "closing": "Emphasize at the close of your meeting that Guidelines stay intact as participants fellowship with each other after the meeting."
+  },
+  "lessonsCredit": "Lessons from the Celebrate Recovery® Leader’s Guide."
 };

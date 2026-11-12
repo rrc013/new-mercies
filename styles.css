@@ -218,3 +218,26 @@ nav.bottom button.locked { opacity: .35; }
 
 details summary { list-style: none; } details summary::-webkit-details-marker { display: none; }
 .modal textarea { min-height: 110px; }
+
+/* Study tiles and lesson reader */
+.tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.tile { text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: var(--radius);
+  padding: 16px 14px; min-height: 128px; display: flex; flex-direction: column; gap: 4px; cursor: pointer; box-shadow: var(--shadow); }
+.tile.wide { grid-column: 1 / -1; min-height: 96px; }
+.tile-icon { font-size: 1.7rem; line-height: 1; margin-bottom: 6px; }
+.tile-title { font-weight: 700; font-size: 1.02rem; line-height: 1.25; }
+.tile-sub { font-size: .8rem; color: var(--muted); }
+.lesson { line-height: 1.65; }
+.lesson p { margin: 0 0 14px; }
+.lesson-h { font-size: 1.15em; margin: 26px 0 10px; }
+.lesson-h3 { font-size: 1.02em; margin: 20px 0 8px; }
+.lesson-ul { margin: 0 0 14px; padding-left: 1.2em; } .lesson-ul li { margin-bottom: 8px; }
+.lesson-v { font-style: italic; padding-left: 12px; border-left: 3px solid var(--gold); }
+.acro-word { font-weight: 800; letter-spacing: .3em; font-size: 1.3em; color: var(--gold); margin: 6px 0 8px; }
+.acro { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin: 0 0 16px; }
+.acro div { padding: 3px 0; } .acro b { color: var(--gold); font-size: 1.15em; margin-right: 1px; }
+
+.tts-bar { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 6px); z-index: 5; display: flex; flex-wrap: wrap; gap: 8px; align-items: center;
+  background: var(--bg); padding: 8px 0 10px; margin-bottom: 6px; }
+.speaking { background: var(--gold-soft); border-radius: 8px; box-shadow: 0 0 0 6px var(--gold-soft); }
+.acro .speaking { box-shadow: none; }
