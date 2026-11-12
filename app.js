@@ -996,8 +996,9 @@ async function viewStudy(view) {
     const list = (sub === 'steps' ? st.steps : st.principles) || [];
     view.innerHTML = back('') + `<h1>${sub === 'steps' ? 'The 12 Steps' : 'The 8 Principles'}</h1>
       <div class="card">${list.map((x) => `<div class="member-row" data-act="studyItem" data-kind="${kind}" data-n="${x.n}">
-        <div class="avatar">${x.n}</div><div class="info"><div class="small" style="line-height:1.4">${esc(x.text)}</div>
-        ${x.relatesTo ? `<div class="small muted" style="margin-top:4px">${esc(x.relatesTo)}</div>` : ''}</div>
+        <div class="avatar">${x.n}</div><div class="info"><div style="line-height:1.45;font-size:.95rem">${esc(x.text)}</div>
+        ${x.relatesTo ? `<div class="small muted" style="margin-top:4px">${esc(x.relatesTo)}</div>` : ''}
+        ${(x.verses || []).map((v) => `<div class="list-verse"><span class="serif">“${esc(v.text)}”</span> <span class="list-ref">${esc(v.ref)}</span></div>`).join('')}</div>
         ${kind === 'step' && x.n === S.me.current_step ? '<span class="pill gold">Current</span>' : '<span class="muted">›</span>'}</div>`).join('')}</div>
       ${st.credit ? `<p class="hint">${esc(st.credit)}</p>` : ''}`;
     return;
@@ -1041,6 +1042,23 @@ async function viewStudy(view) {
       ${tile('lessons', '📖', 'Lessons', '25 lessons on the principles', true)}
     </div>`;
 }
+ACT.studyItem = (el) => {
+  const st = window.NM_STUDY || {}; const kind = el.dataset.kind; const n = Number(el.dataset.n);
+  const x = ((kind === 'step' ? st.steps : st.principles) || []).find((i) => i.n === n); if (!x) return;
+  const m = modal(`<div class="section-title" style="margin-top:0">${kind === 'step' ? 'Step' : 'Principle'} ${n}</div>
+    <p style="font-size:1.08rem;line-height:1.5;margin-top:0">${esc(x.text)}</p>
+    ${x.relatesTo ? `<p class="small muted" style="margin-top:-6px">${esc(x.relatesTo)}</p>` : ''}
+    ${(x.verses || []).map((v) => `<div class="card verse"><div class="ref">${esc(v.ref)}</div><p class="serif">${esc(v.text)}</p></div>`).join('')}
+    ${kind === 'step' ? (n === S.me.current_step ? '<p class="small muted center">This is the step you\'re working on.</p>'
+      : `<button class="btn block" data-x="cur">I'm working on this step</button>`) : ''}
+    ${kind === 'step' && n === 4 ? '<button class="btn primary block" data-x="s4" style="margin-top:8px">Open my Step 4 inventory</button>' : ''}
+    <button class="btn ghost block" data-x="close" style="margin-top:8px">Close</button>`);
+  m.el.querySelector('[data-x=close]').onclick = m.close;
+  const cur = m.el.querySelector('[data-x=cur]');
+  if (cur) cur.onclick = async () => { const { error } = await sb.rpc('set_step', { p_step: n }); if (error) return toast(errMsg(error)); S.me.current_step = n; m.close(); toast(`Working on step ${n}.`); renderView(); };
+  const s4 = m.el.querySelector('[data-x=s4]');
+  if (s4) s4.onclick = () => { m.close(); ACT.openStep4(); };
+};
 ACT.studyGo = (el) => { S.studySub = el.dataset.to || null; renderView(); window.scrollTo(0, 0); };
 
 // Lesson reader
